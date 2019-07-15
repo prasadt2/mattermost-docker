@@ -2,7 +2,7 @@
 
 # Define default value for app container hostname and port
 APP_HOST=${APP_HOST:-app}
-APP_PORT_NUMBER=${APP_PORT_NUMBER:-80}
+APP_PORT_NUMBER=${APP_PORT_NUMBER:-8000}
 
 # Check if SSL should be enabled (if certificates exists)
 if [ -f "/cert/cert.pem" -a -f "/cert/key-no-password.pem" ]; then
@@ -19,4 +19,4 @@ sed -i "s/{%APP_HOST%}/${APP_HOST}/g" /etc/nginx/conf.d/mattermost.conf
 sed -i "s/{%APP_PORT%}/${APP_PORT_NUMBER}/g" /etc/nginx/conf.d/mattermost.conf
 
 # Run Nginx
-nginx -g 'daemon off;'
+exec nginx -g 'daemon off;'

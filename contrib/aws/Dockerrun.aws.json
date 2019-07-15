@@ -20,6 +20,12 @@
             }
         },
         {
+            "name": "app-plugins",
+            "host": {
+                "sourcePath": "/var/app/current/app/mattermost/plugins"
+            }
+        },
+        {
             "name": "db-data",
             "host": {
                 "sourcePath": "/var/app/current/db/mattermost/var/lib/postgresql/data"
@@ -37,6 +43,7 @@
             "name": "db",
             "image": "mattermost/mattermost-prod-db:latest",
             "memory": 128,
+            "essential": true,
             "mountPoints": [
                 {
                     "sourceVolume": "db-data",
@@ -60,6 +67,7 @@
             "name": "app",
             "image": "mattermost/mattermost-prod-app:latest",
             "memory": 128,
+            "essential": true,
             "mountPoints": [
                 {
                     "sourceVolume": "app-config",
@@ -72,6 +80,10 @@
                 {
                     "sourceVolume": "app-logs",
                     "containerPath": "/mattermost/logs"
+                },
+                {
+                    "sourceVolume": "app-plugins",
+                    "containerPath": "/mattermost/plugins"
                 }
             ],
             "links": [
@@ -80,8 +92,9 @@
         },
         {
             "name": "web",
-            "image": "mattermost/mattermost-prod-web:latest",
+            "image": "mattermost/mattermost-prod-web:5.9.0",
             "memory": 128,
+            "essential": true,
             "mountPoints": [
                 {
                     "sourceVolume": "web-cert",

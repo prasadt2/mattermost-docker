@@ -16,19 +16,19 @@ The following instructions deploy Mattermost in a production configuration using
 
 ### Requirements
 
-* [docker] (version `1.10.0+`)
-* [docker-compose] (version `1.6.0+` to support Compose file version `2.0`)
+* [docker] (version `1.12+`)
+* [docker-compose] (version `1.10.0+` to support Compose file version `3.0`)
 
 ### Choose Edition to Install
 
 If you want to install Enterprise Edition, you can skip this section.
 
-To install the team edition, comment out the two following lines in docker-compose.yaml file:
+To install the team edition, uncomment out these lines in docker-compose.yaml file:
 ```yaml
 args:
   - edition=team
 ```
-The `app` Dockerfile will read the `edition` build argument to install Team (`edition = 'team'`) or Entreprise (`edition != team`) edition.
+The `app` Dockerfile will read the `edition` build argument to install Team (`edition = 'team'`) or Enterprise (`edition != team`) edition.
 
 ### Database container
 This repository offer a Docker image for the Mattermost database. It is a customized PostgreSQL image that you should configure with following environment variables :
@@ -48,9 +48,9 @@ If deploying to AWS, you could also set following variables to enable [Wal-E](ht
 All four environment variables are required. It will enable completed WAL segments sent to archive storage (S3). The base backup and clean up can be done through the following command:
 ```bash
 # Base backup
-docker exec mattermost-db su - postgres sh -c "/usr/bin/envdir /etc/wal-e.d/env /usr/local/bin/wal-e backup-push /var/lib/postgresql/data"
+docker exec mattermost-db su - postgres sh -c "/usr/bin/envdir /etc/wal-e.d/env /usr/bin/wal-e backup-push /var/lib/postgresql/data"
 # Keep the most recent 7 base backups and remove the old ones
-docker exec mattermost-db su - postgres sh -c "/usr/bin/envdir /etc/wal-e.d/env /usr/local/bin/wal-e delete --confirm retain 7"
+docker exec mattermost-db su - postgres sh -c "/usr/bin/envdir /etc/wal-e.d/env /usr/bin/wal-e delete --confirm retain 7"
 ```
 Those tasks can be executed through a cron job or systemd timer.
 
@@ -73,10 +73,32 @@ If you choose to use MySQL instead of PostgreSQL, you should set a different dat
 * `MM_SQLSETTINGS_DATASOURCE` : `MM_USERNAME:MM_PASSWORD@tcp(DB_HOST:DB_PORT_NUMBER)/MM_DBNAME?charset=utf8mb4,utf8&readTimeout=30s&writeTimeout=30s`
 Don't forget to replace all entries (beginning by `MM_` and `DB_`) in `MM_SQLSETTINGS_DATASOURCE` with the real variables values.
 
+If you want to push Mattermost application to **Cloud Foundry**, use a `manifest.yml` like this one (with external PostgreSQL service):
+
+```
+---
+applications:
+- name: mattermost
+  docker:
+    image: mattermost/mattermost-prod-app
+  instances: 1
+  memory: 1G
+  disk_quota: 256M
+  env:
+    DB_HOST: database host address
+    DB_PORT_NUMBER: database port
+    MM_DBNAME: database name
+    MM_USERNAME: database username
+    MM_PASSWORD: database password
+
+```
+
 ### Web server container
 This image is optional, you should **not** use it when you have your own reverse-proxy. It is a simple front Web server for the Mattermost app container. If you use the provided `docker-compose.yml` file, you don't have to configure anything. But if your application container is reachable on custom host and/or port (eg. if you use a container provider), you should add those two environment variables :
 * `APP_HOST`: application host address
 * `APP_PORT_NUMBER`: application HTTP port
+
+If you plan to upload large files to your Mattermost instance, Nginx will need to write some temporary files. In that case, the `read_only: true` option on the `web` container should be removed from your `docker-compose.yml` file.
 
 #### Install with SSL certificate
 Put your SSL certificate as `./volumes/web/cert/cert.pem` and the private key that has
@@ -86,7 +108,10 @@ them you may generate a self-signed SSL certificate.
 ### Starting/Stopping Docker
 
 #### Start
+If you are running docker with non root user, make sure the UID and GID in app/Dockerfile are the same as your current UID/GID
 ```
+mkdir -p ./volumes/app/mattermost/{data,logs,config,plugins}
+chown -R 2000:2000 ./volumes/app/mattermost/
 docker-compose start
 ```
 
@@ -127,6 +152,22 @@ docker-compose up -d
 
 Your Docker image should now be on the latest Mattermost version.
 
+
+## Upgrading Mattermost to 4.9+
+
+Docker images for `4.9.0` release introduce some important changes from [PR #241](https://github.com/mattermost/mattermost-docker/pull/241) to improve production use of Mattermost with Docker.
+**There are 2 important changes for existing installations**
+
+One important change is that we don't use `root` user by default to run the Mattermost application. So, as explained on [the README](https://github.com/mattermost/mattermost-docker#start), if you use host mounted volume you have to be sure that files on your host server have the correct UID/GID (by default those values are `2000`). In practice, you should just run following commands :
+```
+mkdir -p ./volumes/app/mattermost/{data,logs,config,plugins}
+chown -R 2000:2000 ./volumes/app/mattermost/
+```
+
+The second important change is the port used by Mattermost application container. The default port is now `8000`, and existing installations that use port `80` will not work without a little configuration change. You have to open your Mattermost configuration file (`./volumes/app/mattermost/config/config.json` by default) and change the key `ServiceSettings.ListenAddress` to `:8000`.
+Also if you use your own web-server/reverse-proxy you need to change its configuration to reach port `8000` of the Mattermost container.
+
+
 ## Upgrading to Team Edition 3.0.x from 2.x
 
 You need to migrate your database before upgrading Mattermost to `3.0.x` from
@@ -152,7 +193,7 @@ Running containerized applications on multi-node swarms involves specific data p
 
 First, create mattermost directory structure on the docker hosts:
 ```
-mkdir -p /var/lib/mattermost/{cert,config,data,logs}
+mkdir -p /var/lib/mattermost/{cert,config,data,logs,plugins}
 ```
 
 Then, fire up the stack in your swarm:
@@ -175,4 +216,4 @@ For the server configurations, see [prod-ubuntu.rst] of Mattermost.
 
 [docker]: http://docs.docker.com/engine/installation/
 [docker-compose]: https://docs.docker.com/compose/install/
-[prod-ubuntu.rst]: https://docs.mattermost.com/install/install-ubuntu-1404.html
+[prod-ubuntu.rst]: https://docs.mattermost.com/install/install-ubuntu-1604.html
